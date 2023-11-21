@@ -1,0 +1,201 @@
+<?php
+/**
+ * @file
+ * My custom module.
+ */
+/**
+ * Impements hook_permission().
+ */
+function easyschool_node_permission()
+{
+  return array(
+    'es_node_show' => array(
+      'title' => t('Access My Easyschool'),
+      'description' => t('Access My Easyschool on my site.'),
+    ),
+    'es_node_create' => array(
+      'title' => t('Access My Easyschool'),
+      'description' => t('Access My Easyschool on my site.'),
+    ),
+    'es_node_update' => array(
+      'title' => t('Access My Easyschool'),
+      'description' => t('Access My Easyschool on my site.'),
+    ),
+    'es_node_delete' => array(
+      'title' => t('Access My Easyschool'),
+      'description' => t('Access My Easyschool on my site.'),
+    ),
+  );
+}
+
+/**
+ * Impements hook_menu().
+ */
+function easyschool_node_menu()
+{
+  $items = array();
+  $items['api/man/v1/blogs'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('easyschool_node_get_blogs'),
+    'access arguments' => array('es_node_show'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['blogs/add'] = array(
+    'title' => 'Add Customer',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('easyschool_node_add_node_form'),
+    'access arguments' => array('es_node_create'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['blogs/update'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('easyschool_node_update_blogs_form'),
+    'access arguments' => array('es_node_update'),
+  );
+  $items['blogs/delete'] = array(
+    'page callback' => 'easyschool_node_delete_blogs',
+    'access arguments' => array('es_node_delete'),
+  );
+  $items['api/man/v1/blogs/%'] = array(
+    'title' => 'Customer',
+    'page callback' => 'easyschool_node_process_blogs1',
+    'access arguments' => array('es_node_show'),
+  );
+  return $items;
+}
+
+function easyschool_node_debug($data)
+{
+  print "<pre>";
+  print_r($data);
+  print "</pre>";
+}
+
+function easyschool_node_process_blogs()
+{
+  $departments = !empty($_REQUEST['department']) ? explode(',', $_REQUEST['department']) : FALSE;
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  if ($departments) $query->fieldCondition('field_department', 'tid', $departments, 'IN');
+  if (!empty($_REQUEST['keyword1'])) {
+    $query->addTag('keyword1');
+    $query->addMetaData('keyword1', $_REQUEST['keyword1']);
+  }
+  $result = $query->execute();
+  if (!empty($result['node'])) {
+    $node_ids = array_keys($result['node']);
+    $nodes = node_load_multiple($node_ids);
+    $data = array();
+    foreach ($nodes as $node) {
+      $taxonomy = taxonomy_term_load($node->field_department['und'][0]['tid']);
+      if ($taxonomy) {
+        $department = $taxonomy->name;
+      }
+      $data[] = array(
+        'name' => $node->title,
+        'department' => $department,
+      );
+    }
+    $nodes_ids = [];
+    $nodes = taxonomy_term_load($nodes_ids);
+    easyschool_node_debug($data);
+    die;
+  }
+}
+
+/**
+ * Implements Hook_query_TAG_alter
+ */
+function easyschool_node_query_keyword11_alter(QueryAlterableInterface $query)
+{
+  $keyword1 = $query->getMetaData('keyword1');
+  $query->join('field_data_field_department', 'd', 'node.nid = d.entity_id');
+  $query->join('taxonomy_term_data', 't', 'd.field_department_tid = t.tid');
+  $or = db_or();
+  $or->condition('node.title', '%' . $keyword1 . '%', 'like');
+  $or->condition('t.name', '%' . $keyword1 . '%', 'like');
+  $query->condition($or);
+}
+
+/**
+ * Page callback for the easyschool_node_page().
+ */
+function easyschool_node_get_blogs()
+{
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node');
+  $result = $query->execute();
+  if (!empty($result['node'])) {
+    $node_ids = array_keys($result['node']);
+    $nodes = node_load_multiple($node_ids);
+    $data = array();
+    foreach ($nodes as $node) {
+      $taxonomy = taxonomy_term_load($node->field_department['und'][0]['tid']);
+      if ($taxonomy) {
+        $department = $taxonomy->name;
+      }
+      $data[] = array(
+        'id' => $node->nid,
+        'title' => $node->title,
+        'Department' => $department,
+      );
+    }
+    $nodes_ids = [];
+    $nodes = taxonomy_term_load($nodes_ids);
+    easyschool_node_debug($data);
+    die;
+  } else {
+    print 'No nodes found.';
+  }
+}
+
+/**
+ * Form callback for adding a new node
+ */
+function easyschool_node_add_node_form()
+{
+  $type = isset($_REQUEST['type']) ? $_REQUEST['type'] : '';
+  $title = isset($_REQUEST['title']) ? $_REQUEST['title'] : '';
+  $uid = isset($_REQUEST['uid']) ? $_REQUEST['uid'] : '';
+  $status = isset($_REQUEST['status']) ? $_REQUEST['status'] : '';
+  $department = isset($_REQUEST['department']) ? $_REQUEST['department'] : '';
+  // Sử dụng giá trị
+  $node = new stdClass();
+  $node->type = $type;
+  $node->title = $title;
+  $node->uid = $uid;
+  $node->status = $status;
+  $node->field_department[LANGUAGE_NONE][0]['tid'] = $department;
+  node_save($node);
+  drupal_set_message(t('Update Location successfully.'));
+}
+
+/**
+ * update node
+ */
+function easyschool_node_update_blogs_form(){
+  $nid = isset($_REQUEST['nId']) ? $_REQUEST['nId'] : '';
+  $title = isset($_REQUEST['title']) ? $_REQUEST['title'] : '';
+  $status = isset($_REQUEST['status']) ? $_REQUEST['status'] : '';
+  $department = isset($_REQUEST['department']) ? $_REQUEST['department'] : '';
+  $existing_node = node_load($nid);
+  $existing_node->title = $title;
+  $existing_node->status = $status;
+  $existing_node->field_department[LANGUAGE_NONE][0]['tid'] = $department;
+  node_save($existing_node);
+}
+/**
+ * delete node
+ */
+function easyschool_node_delete_blogs(){
+  $node_ids = isset($_REQUEST['nodeIds']) ? explode(',', $_REQUEST['nodeIds']) : array();
+  $existing_node = node_load_multiple($node_ids);
+  if ($existing_node) {
+    node_delete_multiple($node_ids);
+    drupal_set_message(t('User deleted successfully.'));
+  } else {
+    drupal_set_message(t('User not found.'), 'error');
+  }
+}
+
+

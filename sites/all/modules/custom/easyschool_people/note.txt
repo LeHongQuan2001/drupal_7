@@ -1,0 +1,7 @@
+?name=user10&mail=user10@gmail.com&pass=1&status=1&role=authenticated user&location=17
+
+?userid=13&name=user008&mail=user008@gmail.com
+
+?nId=44&title=Phòng Kinh Doanh&status=1&department=11
+
+?type=company&title=Phong ky thuat&uid=1&status=1&department=21

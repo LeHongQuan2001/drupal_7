@@ -1,0 +1,193 @@
+﻿<?php
+
+/**
+ * @file
+ * My custom module.
+ */
+
+/**
+ * Impements hook_permission().
+ */
+function easyschool_people_permission()
+{
+  return array(
+    'es_people_show' => array(
+      'title' => t('Access My Easyschool'),
+      'description' => t('Access My Easyschool on my site.'),
+    ),
+    'es_people_create' => array(
+      'title' => t('Access My Easyschool'),
+      'description' => t('Access My Easyschool on my site.'),
+    ),
+    'es_people_update' => array(
+      'title' => t('Access My Easyschool'),
+      'description' => t('Access My Easyschool on my site.'),
+    ),
+    'es_people_delete' => array(
+      'title' => t('Access My Easyschool'),
+      'description' => t('Access My Easyschool on my site.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function easyschool_people_menu()
+{
+  $items = array();
+  $items['api/man/v1/customers'] = array(
+    'page callback' => 'easyschool_people_get_customers',
+    'access arguments' => array('es_people_show'),
+  );
+  $items['customers/add'] = array(
+    'title' => 'Add Customer',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('easyschool_people_add_customer_form'),
+    'access arguments' => array('es_people_create'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['customers/update'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('easyschool_people_update_customer_form'),
+    'access arguments' => array('es_people_update'),
+  );
+  $items['customers/delete'] = array(
+    'page callback' => 'easyschool_people_delete_customers',
+    'access arguments' => array('es_people_delete'),
+  );
+  $items['api/man/v1/customers/%'] = array(
+    'title' => 'Customer',
+    'page callback' => 'easyschool_people_process_customer',
+    'access arguments' => array('es_people_show'),
+  );
+  return $items;
+}
+
+/**
+ * function debug
+ */
+function easyschool_people_debug($data)
+{
+  print "<pre>";
+  print_r($data);
+  print "</pre>";
+}
+
+/**
+ * Page callback for the easyschool_people_page().
+ */
+function easyschool_people_get_customers()
+{
+  $locations = !empty($_REQUEST['locations']) ? explode(',', $_REQUEST['locations']) : FALSE;
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'user');
+  if ($locations) $query->fieldCondition('field_location', 'tid', $locations, 'IN');
+  if (!empty($_REQUEST['keyword'])) {
+    $query->addTag('keyword');
+    $query->addMetaData('keyword', $_REQUEST['keyword']);
+  }
+  $result = $query->execute();
+  if (!empty($result['user'])) {
+    $user_ids = array_keys($result['user']);
+    $users = user_load_multiple($user_ids);
+    $data = array();
+    foreach ($users as $user) {
+      $taxonomy = taxonomy_term_load($user->field_location['und'][0]['tid']);
+      if ($taxonomy) { $location = $taxonomy->name; }
+      $data[] = array(
+        'name' => $user->name,
+        'Location' => $location,
+      );
+      easyschool_people_debug($data);
+      die;
+    }
+    return $data;
+  }
+}
+/**
+ * Implements Hook_query_TAG_alter
+ */
+function easyschool_people_query_keyword_alter(QueryAlterableInterface $query){
+  $keyword = $query->getMetaData('keyword');
+  $query->join('field_data_field_location', 'l', 'users.uid = l.entity_id');
+  $query->join('taxonomy_term_data', 't', 'l.field_location_tid = t.tid');
+  $or = db_or();
+  $or->condition('users.name', '%' . $keyword . '%', 'like');
+  $or->condition('t.name', '%' . $keyword . '%', 'like');
+  $query->condition($or);
+}
+/**
+ * Form callback for adding a new customer.
+ */
+function easyschool_people_add_customer_form(){
+  $name = isset($_REQUEST['name']) ? $_REQUEST['name'] : '';
+  $mail = isset($_REQUEST['mail']) ? $_REQUEST['mail'] : '';
+  $pass = isset($_REQUEST['pass']) ? $_REQUEST['pass'] : '';
+  $status = isset($_REQUEST['status']) ? $_REQUEST['status'] : '';
+  $role = isset($_REQUEST['role']) ? $_REQUEST['role'] : '';
+  $location = isset($_REQUEST['location']) ? $_REQUEST['location'] : '';
+// Sử dụng giá trị
+  $user = new stdClass();
+  $user->name = $name;
+  $user->mail = $mail;
+  $user->pass = $pass;
+  $user->status = $status;
+  $user->role = $role;
+  $user->location = $location;
+  $account = user_save($user);
+  if ($account) {
+    $field_location_instance = field_info_field('field_location');
+    if ($field_location_instance) {
+      $existing_taxonomy = taxonomy_term_load($location);
+      if (!$existing_taxonomy) {
+        $new_term = new stdClass();
+        $new_term->vid = '1'; // Replace with the actual vocabulary ID.
+        $new_term->name = '1'; // Replace with the desired term name.
+        $new_term->description = '1'; // Replace with the desired term description.
+        $new_term->weight = 0;
+        $location = $new_term->tid;
+      }
+      $account->field_location[LANGUAGE_NONE][0]['tid'] = $location;
+      user_save($account);
+      drupal_set_message(t('Update Location successfully.'));
+    } else {
+      drupal_set_message(t('Field field_location does not exist.'), 'error');
+    }
+  } else {
+    drupal_set_message(t('Failed to insert user.'), 'error');
+  }
+}
+/**
+ * Form callback for updating a customer.
+ */
+function easyschool_people_update_customer_form(){
+  // ID của người dùng cần cập nhật.
+  $user_ids = isset($_GET['userid']) ? $_GET['userid'] : '';
+  $name = isset($_GET['name']) ? $_GET['name'] : '';
+  $mail = isset($_GET['mail']) ? $_GET['mail'] : '';
+  $user_id = $user_ids;
+  $existing_user = user_load($user_id);
+  $existing_user->name = $name;
+  $existing_user->mail = $mail;
+  user_save($existing_user);
+}
+/**
+ * Page callback for deleting customers.
+ */
+function easyschool_people_delete_customers(){
+  $user_ids = isset($_REQUEST['userIds']) ? explode(',', $_REQUEST['userIds']) : array();
+    $existing_user = user_load_multiple($user_ids);
+    if ($existing_user) {
+      user_delete_multiple($user_ids);
+      drupal_set_message(t('User deleted successfully.'));
+    } else {
+      drupal_set_message(t('User not found.'), 'error');
+    }
+}
+
+
+
+
+
